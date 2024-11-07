@@ -329,7 +329,7 @@ const Chat = () => {
                 <div className="p-4 border-b border-gray-200">
                     <Button
                         onClick={createNewChat}
-                        className="w-full flex items-center gap-2 bg-blue-500 hover:bg-blue-600"
+                        className="w-full flex items-center gap-2 bg-[#171717] hover:bg-[#2d2d2d]"
                     >
                         <Plus className="h-4 w-4" />
                         <span className="hidden sm:inline">New Chat</span>
@@ -470,7 +470,7 @@ const Chat = () => {
                                     onClick={startRecording}
                                     disabled={isProcessing || isRecording || messageCount >= 5}
                                     size="lg"
-                                    className="h-12 sm:h-14 px-4 sm:px-6 bg-blue-500 hover:bg-blue-600 text-white flex items-center gap-2"
+                                    className="h-12 sm:h-14 px-4 sm:px-6 bg-[#171717] hover:bg-[#2d2d2d] text-white flex items-center gap-2"
                                 >
                                     <Mic className="h-5 w-5" />
                                     <span className="hidden sm:inline">Record</span>
@@ -503,7 +503,7 @@ const Chat = () => {
                             <Button
                                 onClick={createNewChat}
                                 variant="default"
-                                className="mt-2"
+                                className="mt-2 bg-[#171717] hover:bg-[#2d2d2d] text-white"
                             >
                                 Start New Chat
                             </Button>
