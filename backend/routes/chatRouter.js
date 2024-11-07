@@ -5,7 +5,8 @@ const {
     createChat, 
     sendMessage, 
     getChats, 
-    getChatById 
+    getChatById, 
+    deleteChat 
 } = require('../controllers/chatController');
 
 // Configure multer for audio uploads
@@ -46,5 +47,6 @@ router.post('/message', (req, res, next) => {
 
 router.get('/', getChats);
 router.get('/:id', getChatById);
+router.delete('/:id', authenticateToken, deleteChat);
 
 module.exports = router; 

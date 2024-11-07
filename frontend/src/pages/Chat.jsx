@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Mic, Square, Play, Pause, Plus } from "lucide-react";
+import { Loader2, Mic, Square, Play, Pause, Plus, Trash2 } from "lucide-react";
 import api from '../utils/api';
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -285,6 +285,43 @@ const Chat = () => {
         setMessageCount(chat.messages.length / 2);
     };
 
+    const deleteChat = async (chatId, e) => {
+        e.stopPropagation(); // Prevent chat selection when clicking delete
+
+        try {
+            await api.delete(`/api/v1/chat/${chatId}`);
+            
+            // Remove chat from state
+            setChats(prevChats => prevChats.filter(chat => chat._id !== chatId));
+            
+            // If the deleted chat was selected, select the most recent chat
+            if (currentChatId === chatId) {
+                const remainingChats = chats.filter(chat => chat._id !== chatId);
+                if (remainingChats.length > 0) {
+                    setCurrentChatId(remainingChats[0]._id);
+                    setChatId(remainingChats[0]._id);
+                    setMessageCount(remainingChats[0].messages.length / 2);
+                } else {
+                    setCurrentChatId(null);
+                    setChatId(null);
+                    setMessageCount(0);
+                }
+            }
+
+            toast({
+                title: "Chat deleted",
+                description: "Chat history has been removed",
+            });
+        } catch (err) {
+            console.error('Error deleting chat:', err);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to delete chat"
+            });
+        }
+    };
+
     return (
         <div className="min-h-[80vh] flex flex-col lg:flex-row items-stretch w-full max-w-6xl mx-auto">
             {/* Sidebar */}
@@ -307,29 +344,45 @@ const Chat = () => {
                             const isSelected = chat._id === currentChatId;
 
                             return (
-                                <Button
+                                <div
                                     key={chat._id}
-                                    variant={isSelected ? "secondary" : "ghost"}
-                                    className={cn(
-                                        "w-full justify-start text-left p-3 space-y-1 h-auto",
-                                        isSelected && "bg-blue-50"
-                                    )}
-                                    onClick={() => selectChat(chat)}
+                                    className="group relative"
                                 >
-                                    <div className="flex flex-col gap-1 w-full">
-                                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                                            <span className="text-xs text-gray-500">
-                                                {formatDistanceToNow(new Date(chat.createdAt), { addSuffix: true })}
-                                            </span>
-                                            <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
-                                                {chat.messages.length / 2}/5
-                                            </span>
+                                    <Button
+                                        variant={isSelected ? "secondary" : "ghost"}
+                                        className={cn(
+                                            "w-full justify-start text-left p-3 space-y-1 h-auto pr-12",
+                                            isSelected && "bg-blue-50"
+                                        )}
+                                        onClick={() => selectChat(chat)}
+                                    >
+                                        <div className="flex flex-col gap-1 w-full">
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                <span className="text-xs text-gray-500">
+                                                    {formatDistanceToNow(new Date(chat.createdAt), { addSuffix: true })}
+                                                </span>
+                                                <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
+                                                    {chat.messages.length / 2}/5
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-600 line-clamp-2 hidden sm:block">
+                                                {preview}
+                                            </p>
                                         </div>
-                                        <p className="text-sm text-gray-600 line-clamp-2 hidden sm:block">
-                                            {preview}
-                                        </p>
-                                    </div>
-                                </Button>
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "absolute right-2 top-1/2 -translate-y-1/2",
+                                            "opacity-0 group-hover:opacity-100 transition-opacity",
+                                            "h-8 w-8 text-gray-500 hover:text-red-500"
+                                        )}
+                                        onClick={(e) => deleteChat(chat._id, e)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             );
                         })}
                     </div>
