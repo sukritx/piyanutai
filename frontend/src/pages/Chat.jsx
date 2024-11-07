@@ -399,7 +399,7 @@ const Chat = () => {
                 {/* Chat Header */}
                 <div className="p-4 border-b border-gray-200">
                     <h2 className="text-xl font-semibold text-gray-700 text-center lg:text-left">
-                        Voice Chat Assistant
+                        Chat with PiyanutAI
                     </h2>
                 </div>
 

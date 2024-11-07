@@ -23,9 +23,6 @@ const Navbar = () => {
         <div>
           {isAuthenticated ? (
             <>
-              <Button asChild className="mr-2">
-                <Link to="/dashboard">Dashboard</Link>
-              </Button>
               <Button variant="outline" onClick={logout}>
                 Logout
               </Button>
