@@ -88,7 +88,7 @@ const sendMessage = async (req, res) => {
             model: modelToUse,
             messages: conversationHistory,
             temperature: 0.7,
-            max_tokens: 150
+            max_tokens: 350
         });
 
         // Clean up the assistant message
