@@ -9,7 +9,7 @@ const AuthCallback = () => {
   useEffect(() => {
     const completeAuth = async () => {
       await checkAuthStatus();
-      navigate('/dashboard');
+      navigate('/chat');
     };
 
     completeAuth();

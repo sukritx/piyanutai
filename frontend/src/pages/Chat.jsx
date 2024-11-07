@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Mic, Square, Play, Pause, Plus, Trash2 } from "lucide-react";
+import { Loader2, Mic, Square, Plus, Trash2 } from "lucide-react";
+import { useAuth } from '../hooks/useAuth';
 import api from '../utils/api';
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
 
 const Chat = () => {
+    const navigate = useNavigate();
+    const { isAuthenticated, loading } = useAuth();
+    const { toast } = useToast();
+
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -20,49 +25,28 @@ const Chat = () => {
     const [chats, setChats] = useState([]);
     const [currentChatId, setCurrentChatId] = useState(null);
     const [messageCount, setMessageCount] = useState(0);
-    
+
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
     const chunksRef = useRef([]);
     const audioSourceRef = useRef(null);
     const audioContextRef = useRef(null);
-    const { toast } = useToast();
 
     useEffect(() => {
-        const initChat = async () => {
-            try {
-                const response = await api.post('/api/v1/chat');
-                setChatId(response.data._id);
-            } catch (err) {
-                console.error('Chat initialization error:', err);
-                toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: "Failed to initialize chat session"
-                });
-            }
-        };
+        if (!loading && !isAuthenticated) {
+            navigate('/signin');
+        }
+    }, [isAuthenticated, loading, navigate]);
 
-        initChat();
-        
-        // Cleanup function
-        return () => {
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-        };
-    }, []);
-
-    // Fetch user's chat history
     useEffect(() => {
         const fetchChats = async () => {
             try {
                 const response = await api.get('/api/v1/chat');
                 setChats(response.data);
-                // If there are chats, set the most recent one as current
                 if (response.data.length > 0) {
                     setCurrentChatId(response.data[0]._id);
-                    setMessageCount(response.data[0].messages.length / 2); // Divide by 2 because each interaction has user + assistant message
+                    setChatId(response.data[0]._id);
+                    setMessageCount(response.data[0].messages.length / 2);
                 }
             } catch (err) {
                 console.error('Error fetching chats:', err);
@@ -74,17 +58,36 @@ const Chat = () => {
             }
         };
 
-        fetchChats();
-    }, []);
+        if (isAuthenticated) {
+            fetchChats();
+        }
+    }, [isAuthenticated, toast]);
+
+    if (loading) {
+        return (
+            <div className="min-h-[80vh] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                    <p className="text-gray-500">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return null;
+    }
 
     const createNewChat = async () => {
         try {
             const response = await api.post('/api/v1/chat');
-            setCurrentChatId(response.data._id);
+            const newChat = response.data;
+            setChats(prevChats => [newChat, ...prevChats]);
+            setCurrentChatId(newChat._id);
+            setChatId(newChat._id);
             setMessageCount(0);
             setTranscript('');
             setResponse('');
-            setChats(prevChats => [response.data, ...prevChats]);
         } catch (err) {
             console.error('Error creating new chat:', err);
             toast({
@@ -97,16 +100,13 @@ const Chat = () => {
 
     const startRecording = async () => {
         try {
-            // Get media stream
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
 
-            // Create media recorder
             const recorder = new MediaRecorder(stream);
             mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
-            // Set up recorder event handlers
             recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
                     chunksRef.current.push(e.data);
@@ -117,13 +117,11 @@ const Chat = () => {
                 const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
                 await sendAudioToServer(audioBlob);
                 
-                // Clean up
                 stream.getTracks().forEach(track => track.stop());
                 streamRef.current = null;
                 setIsRecording(false);
             };
 
-            // Start recording
             recorder.start();
             setIsRecording(true);
         } catch (err) {
@@ -140,6 +138,98 @@ const Chat = () => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop();
             setIsProcessing(true);
+            setIsRecording(false);
+        }
+    };
+
+    const sendAudioToServer = async (audioBlob) => {
+        if (messageCount >= 5) {
+            toast({
+                title: "Chat limit reached",
+                description: "Please start a new chat to continue asking questions",
+                variant: "warning"
+            });
+            return;
+        }
+
+        if (!chatId) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "No active chat session. Please start a new chat."
+            });
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            const audioFile = new File([audioBlob], 'audio.webm', {
+                type: 'audio/webm',
+                lastModified: Date.now()
+            });
+            
+            formData.append('audioBlob', audioFile);
+            formData.append('chatId', chatId);
+
+            const response = await api.post('/api/v1/chat/message', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                transformRequest: [(data) => data],
+            });
+
+            setTranscript(response.data.transcription);
+            setResponse(response.data.message);
+
+            // Update the chat messages in real-time
+            setChats(prevChats => prevChats.map(chat => 
+                chat._id === chatId 
+                ? { ...chat, messages: [...chat.messages, { role: 'user', content: response.data.transcription }, { role: 'assistant', content: response.data.message }] }
+                : chat
+            ));
+
+            const binaryString = window.atob(response.data.audio);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const audioBuffer = bytes.buffer;
+            setCurrentAudioBuffer(audioBuffer);
+            setHasPlayed(false);
+
+            const audioContext = new AudioContext();
+            const source = audioContext.createBufferSource();
+            
+            const decodedData = await audioContext.decodeAudioData(audioBuffer.slice(0));
+            source.buffer = decodedData;
+            source.connect(audioContext.destination);
+            
+            audioSourceRef.current = source;
+            audioContextRef.current = audioContext;
+
+            source.onended = () => {
+                setIsPlaying(false);
+                setHasPlayed(true);
+                stopAudio();
+            };
+
+            source.start(0);
+            setIsPlaying(true);
+
+            setMessageCount(prev => prev + 1);
+        } catch (err) {
+            console.error('Audio processing error:', err);
+            if (err.response) {
+                console.error('Error response:', err.response.data);
+            }
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: err.response?.data?.message || "Failed to process audio"
+            });
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -163,12 +253,11 @@ const Chat = () => {
         if (!currentAudioBuffer || hasPlayed) return;
         
         try {
-            stopAudio(); // Stop any playing audio
+            stopAudio();
 
             const audioContext = new AudioContext();
             const source = audioContext.createBufferSource();
             
-            // Clone the buffer before decoding to prevent detached buffer error
             const bufferCopy = currentAudioBuffer.slice(0);
             const decodedData = await audioContext.decodeAudioData(bufferCopy);
             
@@ -193,89 +282,7 @@ const Chat = () => {
                 title: "Error",
                 description: "Failed to play audio response"
             });
-            setHasPlayed(true); // Mark as played even on error to prevent further attempts
-        }
-    };
-
-    const sendAudioToServer = async (audioBlob) => {
-        if (messageCount >= 5) {
-            toast({
-                title: "Chat limit reached",
-                description: "Please start a new chat to continue asking questions",
-                variant: "warning"
-            });
-            return;
-        }
-
-        try {
-            setIsProcessing(true);
-            const formData = new FormData();
-            
-            const audioFile = new File([audioBlob], 'audio.webm', {
-                type: 'audio/webm',
-                lastModified: Date.now()
-            });
-            
-            formData.append('audioBlob', audioFile);
-            formData.append('chatId', chatId);
-
-            const response = await api.post('/api/v1/chat/message', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-                transformRequest: [(data) => data],
-            });
-
-            setTranscript(response.data.transcription);
-            setResponse(response.data.message);
-
-            // Convert base64 to ArrayBuffer
-            const binaryString = window.atob(response.data.audio);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            
-            const audioBuffer = bytes.buffer;
-            setCurrentAudioBuffer(audioBuffer);
-            setHasPlayed(false); // Reset hasPlayed for new audio
-
-            // Automatically play the new audio
-            const audioContext = new AudioContext();
-            const source = audioContext.createBufferSource();
-            
-            const decodedData = await audioContext.decodeAudioData(audioBuffer.slice(0));
-            source.buffer = decodedData;
-            source.connect(audioContext.destination);
-            
-            audioSourceRef.current = source;
-            audioContextRef.current = audioContext;
-
-            source.onended = () => {
-                setIsPlaying(false);
-                setHasPlayed(true);
-                stopAudio();
-            };
-
-            source.start(0);
-            setIsPlaying(true);
-
-            // After successful response
-            setMessageCount(prev => prev + 1);
-
-        } catch (err) {
-            console.error('Audio processing error:', err);
-            if (err.response) {
-                console.error('Error response:', err.response.data);
-            }
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: err.response?.data?.message || "Failed to process audio"
-            });
-        } finally {
-            setIsProcessing(false);
+            setHasPlayed(true);
         }
     };
 
@@ -286,15 +293,13 @@ const Chat = () => {
     };
 
     const deleteChat = async (chatId, e) => {
-        e.stopPropagation(); // Prevent chat selection when clicking delete
+        e.stopPropagation();
 
         try {
             await api.delete(`/api/v1/chat/${chatId}`);
             
-            // Remove chat from state
             setChats(prevChats => prevChats.filter(chat => chat._id !== chatId));
             
-            // If the deleted chat was selected, select the most recent chat
             if (currentChatId === chatId) {
                 const remainingChats = chats.filter(chat => chat._id !== chatId);
                 if (remainingChats.length > 0) {
@@ -484,6 +489,7 @@ const Chat = () => {
                                     variant="destructive"
                                     size="lg"
                                     className="h-12 sm:h-14 px-4 sm:px-6 flex items-center gap-2"
+                                    disabled={isProcessing}
                                 >
                                     <Square className="h-5 w-5" />
                                     <span className="hidden sm:inline">Stop</span>

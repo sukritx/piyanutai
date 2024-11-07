@@ -38,7 +38,7 @@ const Signin = () => {
 
       // console.log('Attempting login with credentials:', formData);
       await login(formData);
-      navigate('/dashboard');
+      navigate('/chat');
     } catch (error) {
       // console.error('Signin error:', error);
 

@@ -39,7 +39,7 @@ const Signup = () => {
       const response = await api.post('/api/v1/auth/signup', formData);
       // console.log('Signup response:', response.data);
       await login(formData);
-      navigate('/dashboard');
+      navigate('/chat');
     } catch (error) {
       console.error('Signup error:', error);
 

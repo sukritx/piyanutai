@@ -12,7 +12,7 @@ const AuthComplete = () => {
             try {
                 const response = await api.post('/auth/complete-authentication');
                 login(response.data.token);
-                navigate('/dashboard');
+                navigate('/chat');
             } catch (error) {
                 console.error('Error completing authentication:', error);
                 navigate('/signin');
