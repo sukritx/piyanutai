@@ -9,7 +9,7 @@ const Navbar = () => {
     return (
       <nav className="bg-background border-b">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <Link to="/" className="text-xl font-bold">PiyanutAI</Link>
+          <Link to="/" className="text-xl font-bold">AIPiyanut</Link>
           <div>Loading...</div>
         </div>
       </nav>
@@ -19,7 +19,7 @@ const Navbar = () => {
   return (
     <nav className="bg-background border-b">
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-        <Link to="/" className="text-xl font-bold">PiyanutAI</Link>
+        <Link to="/" className="text-xl font-bold">AIPiyanut</Link>
         <div>
           {isAuthenticated ? (
             <>
