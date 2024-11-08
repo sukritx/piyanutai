@@ -38,6 +38,12 @@ const app = express();
 // Make stateCache available to all routes
 app.use((req, res, next) => {
   req.stateCache = stateCache;
+  // Prevent caching for auth-related endpoints
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
   next();
 });
 
