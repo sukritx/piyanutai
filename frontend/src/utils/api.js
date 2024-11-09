@@ -22,6 +22,8 @@ api.interceptors.request.use(
     async config => {
         // Don't modify the CSRF token for the csrf-token endpoint
         if (config.url === '/api/v1/auth/csrf-token') {
+            // Clear any existing CSRF token when fetching a new one
+            delete api.defaults.headers.common['X-CSRF-Token'];
             return config;
         }
 
@@ -42,11 +44,13 @@ api.interceptors.request.use(
     }
 );
 
-// Add response interceptor
+// Modify the response interceptor to handle cached responses
 api.interceptors.response.use(
     response => response,
     async error => {
         if (error.response?.status === 403 && error.response?.data?.message === 'Invalid CSRF token') {
+            // Clear the existing token
+            delete api.defaults.headers.common['X-CSRF-Token'];
             // Refresh token and retry request
             await fetchCSRFToken();
             return api(error.config);

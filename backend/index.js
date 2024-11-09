@@ -38,12 +38,15 @@ const app = express();
 // Make stateCache available to all routes
 app.use((req, res, next) => {
   req.stateCache = stateCache;
-  // Prevent caching for auth-related endpoints
-  res.set({
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0'
-  });
+  
+  // Only set no-cache headers for auth endpoints
+  if (req.path.startsWith('/api/v1/auth/')) {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+  }
   next();
 });
 
@@ -62,7 +65,11 @@ app.use(cors({
 // Security middleware
 app.use(helmet());
 const csrfProtection = csrf({ 
-    cookie: true,
+    cookie: {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? 'strict' : 'lax',
+        httpOnly: true
+    },
     ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
     value: (req) => {
         return req.headers['x-csrf-token'];
@@ -139,6 +146,17 @@ app.use(helmet.contentSecurityPolicy({
     imgSrc: ["'self'", "data:", "https:"],
   },
 }));
+
+// Add after CSRF middleware
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && req.path === '/api/v1/auth/csrf-token') {
+    logger.info('CSRF Token requested', {
+      headers: req.headers,
+      cookies: req.cookies
+    });
+  }
+  next();
+});
 
 // Start the server
 const PORT = process.env.PORT || 3001;
