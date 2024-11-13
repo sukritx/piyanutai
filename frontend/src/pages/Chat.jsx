@@ -103,59 +103,45 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
-            // Basic audio constraints
+            // Request microphone access with minimal constraints
             const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: isIOS ? 44100 : undefined,
-                    channelCount: isIOS ? 1 : undefined,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                }
+                audio: true,
+                video: false
             });
             
             streamRef.current = stream;
+            console.log('Got audio stream');
 
             let recorder;
-            try {
-                // First try with audio/mp4 for iOS
-                if (isIOS && MediaRecorder.isTypeSupported('audio/mp4')) {
-                    recorder = new MediaRecorder(stream, {
-                        mimeType: 'audio/mp4'
-                    });
-                } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                    // Then try webm for other browsers
-                    recorder = new MediaRecorder(stream, {
-                        mimeType: 'audio/webm'
-                    });
-                } else {
-                    // Fallback to default
-                    recorder = new MediaRecorder(stream);
-                }
-            } catch (e) {
-                console.log('Failed to create MediaRecorder with specified mimeType, using default');
+            if (isIOS) {
+                // For iOS, use a basic configuration
                 recorder = new MediaRecorder(stream);
+                console.log('Created iOS recorder');
+            } else {
+                // For other browsers, use webm
+                recorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm'
+                });
+                console.log('Created non-iOS recorder');
             }
 
             mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
-            // Handle data available event
             recorder.ondataavailable = (e) => {
+                console.log('Data chunk received:', e.data.size);
                 if (e.data.size > 0) {
                     chunksRef.current.push(e.data);
-                    console.log('Recorded chunk size:', e.data.size);
                 }
             };
 
-            // Handle recording stop
             recorder.onstop = async () => {
+                console.log('Recording stopped');
                 try {
-                    const mimeType = isIOS ? 'audio/mp4' : 'audio/webm';
-                    const audioBlob = new Blob(chunksRef.current, { type: mimeType });
-                    
+                    const audioBlob = new Blob(chunksRef.current);
+                    console.log('Created blob:', audioBlob.size);
+
                     if (audioBlob.size > 0) {
-                        console.log('Recording completed, blob size:', audioBlob.size);
                         await sendAudioToServer(audioBlob);
                     } else {
                         throw new Error('No audio data recorded');
@@ -174,10 +160,10 @@ const Chat = () => {
                 }
             };
 
-            // Start recording
-            recorder.start(isIOS ? 1000 : 100); // Longer intervals for iOS
+            // For iOS, use larger time slices
+            recorder.start(2000);
             setIsRecording(true);
-            console.log('Recording started with mime type:', recorder.mimeType);
+            console.log('Recording started');
 
         } catch (err) {
             console.error('Recording setup failed:', err);
@@ -216,22 +202,16 @@ const Chat = () => {
         try {
             setIsProcessing(true);
             const formData = new FormData();
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
-            // Create file with timestamp to avoid caching
-            const timestamp = Date.now();
-            const fileName = isIOS ? `audio_${timestamp}.m4a` : `audio_${timestamp}.webm`;
-            const fileType = isIOS ? 'audio/mp4' : 'audio/webm';
-            
-            const audioFile = new File([audioBlob], fileName, {
-                type: fileType,
-                lastModified: timestamp
+            // Create a simple audio file
+            const audioFile = new File([audioBlob], 'audio.webm', {
+                type: 'audio/webm',
+                lastModified: Date.now()
             });
             
             console.log('Sending file:', {
-                name: fileName,
-                type: fileType,
-                size: audioFile.size
+                size: audioFile.size,
+                type: audioFile.type
             });
             
             formData.append('audioBlob', audioFile);
@@ -242,7 +222,7 @@ const Chat = () => {
                     'Content-Type': 'multipart/form-data',
                 },
                 transformRequest: [(data) => data],
-                timeout: 30000 // 30 second timeout
+                timeout: 30000
             });
 
             // Update UI with response
@@ -259,15 +239,10 @@ const Chat = () => {
                 : chat
             ));
 
-            // Play response audio
+            // Play response audio using Audio element
             if (response.data.audio) {
-                const audioContext = new AudioContext();
-                const audioBuffer = Buffer.from(response.data.audio, 'base64');
-                const decodedData = await audioContext.decodeAudioData(audioBuffer.buffer);
-                const source = audioContext.createBufferSource();
-                source.buffer = decodedData;
-                source.connect(audioContext.destination);
-                source.start(0);
+                const audio = new Audio(`data:audio/mp3;base64,${response.data.audio}`);
+                audio.play().catch(console.error);
             }
 
         } catch (err) {
