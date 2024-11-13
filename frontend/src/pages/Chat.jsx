@@ -8,6 +8,11 @@ import api from '../utils/api';
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
+import { Recorder } from 'vmsg';
+
+const recorder = new Recorder({
+    wasmURL: 'https://unpkg.com/vmsg@0.4.0/vmsg.wasm'
+});
 
 const Chat = () => {
     const navigate = useNavigate();
@@ -103,84 +108,47 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
-            // Basic audio constraints that work on iOS Safari
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 44100,
-                    channelCount: 1,
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }
-            });
-            
-            streamRef.current = stream;
-            console.log('Got audio stream');
-
-            // Create a new MediaRecorder instance
-            const recorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = recorder;
-            chunksRef.current = [];
-
-            // Data handler
-            recorder.ondataavailable = (e) => {
-                console.log('Data available event:', e.data.size);
-                if (e.data.size > 0) {
-                    chunksRef.current.push(e.data);
-                }
-            };
-
-            // Stop handler
-            recorder.onstop = async () => {
-                console.log('Recorder stopped');
-                const audioBlob = new Blob(chunksRef.current, { 
-                    type: isIOS ? 'audio/mp4' : 'audio/webm' 
-                });
-                console.log('Audio blob created:', audioBlob.size);
-
-                if (audioBlob.size > 0) {
-                    // Create a preview URL for debugging
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(audioUrl);
-                    console.log('Preview URL created:', audioUrl);
-
-                    try {
-                        await sendAudioToServer(audioBlob);
-                    } catch (error) {
-                        console.error('Send to server failed:', error);
-                    } finally {
-                        URL.revokeObjectURL(audioUrl);
+            if (isIOS) {
+                // iOS specific recording
+                await recorder.initAudio();
+                await recorder.initWorker();
+                setIsRecording(true);
+                recorder.startRecording();
+                console.log('iOS recording started');
+            } else {
+                // Existing recording logic for other platforms
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 44100,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
                     }
-                } else {
-                    console.error('No audio data recorded');
-                    toast({
-                        variant: "destructive",
-                        title: "Error",
-                        description: "No audio was recorded. Please try again."
-                    });
-                }
-
-                // Cleanup
-                stream.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
-                setIsRecording(false);
-            };
-
-            // Error handler
-            recorder.onerror = (event) => {
-                console.error('Recorder error:', event.error);
-                toast({
-                    variant: "destructive",
-                    title: "Recording Error",
-                    description: `Recording failed: ${event.error.message}`
                 });
-            };
+                
+                streamRef.current = stream;
+                const recorder = new MediaRecorder(stream);
+                mediaRecorderRef.current = recorder;
+                chunksRef.current = [];
 
-            // Start recording
-            recorder.start(1000); // 1-second chunks
-            setIsRecording(true);
-            console.log('Recording started');
+                recorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) {
+                        chunksRef.current.push(e.data);
+                    }
+                };
 
+                recorder.onstop = async () => {
+                    const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                    await sendAudioToServer(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                    setIsRecording(false);
+                };
+
+                recorder.start(1000);
+                setIsRecording(true);
+            }
         } catch (err) {
             console.error('Recording setup failed:', err);
             toast({
@@ -188,20 +156,30 @@ const Chat = () => {
                 title: "Recording Error",
                 description: "Please ensure microphone access is granted and try again"
             });
-
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
-            }
             setIsRecording(false);
         }
     };
 
-    const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
+    const stopRecording = async () => {
+        try {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            if (isIOS) {
+                const blob = await recorder.stopRecording();
+                await sendAudioToServer(blob);
+            } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            }
+            
             setIsProcessing(true);
             setIsRecording(false);
+        } catch (err) {
+            console.error('Error stopping recording:', err);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to stop recording"
+            });
         }
     };
 
@@ -220,10 +198,10 @@ const Chat = () => {
             const formData = new FormData();
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
-            // Create file with timestamp to prevent caching
+            // Create file with appropriate type for iOS or other platforms
             const timestamp = Date.now();
-            const fileName = isIOS ? `audio_${timestamp}.m4a` : `audio_${timestamp}.webm`;
-            const fileType = isIOS ? 'audio/mp4' : 'audio/webm';
+            const fileName = `audio_${timestamp}${isIOS ? '.mp3' : '.webm'}`;
+            const fileType = isIOS ? 'audio/mp3' : 'audio/webm';
             
             const audioFile = new File([audioBlob], fileName, {
                 type: fileType,
@@ -245,7 +223,7 @@ const Chat = () => {
                     'Content-Type': 'multipart/form-data',
                 },
                 transformRequest: [(data) => data],
-                timeout: 60000 // Increased timeout
+                timeout: 60000
             });
 
             // Update UI with response
@@ -262,14 +240,10 @@ const Chat = () => {
                 : chat
             ));
 
-            // Play response audio
+            // Play response audio using standard Audio API
             if (response.data.audio) {
-                try {
-                    const audio = new Audio(`data:audio/mp3;base64,${response.data.audio}`);
-                    await audio.play();
-                } catch (error) {
-                    console.error('Error playing audio:', error);
-                }
+                const audio = new Audio(`data:audio/mp3;base64,${response.data.audio}`);
+                await audio.play();
             }
 
         } catch (err) {
