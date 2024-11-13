@@ -8,11 +8,6 @@ import api from '../utils/api';
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
-import { Recorder } from 'vmsg';
-
-const recorder = new Recorder({
-    wasmURL: 'https://unpkg.com/vmsg@0.4.0/vmsg.wasm'
-});
 
 const Chat = () => {
     const navigate = useNavigate();
@@ -108,70 +103,101 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
+            // Request microphone access with basic constraints
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: isIOS ? 44100 : undefined,
+                    channelCount: isIOS ? 1 : 2,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            
+            streamRef.current = stream;
+            console.log('Got audio stream');
+
+            // Create MediaRecorder with basic configuration
+            let options = {};
+            
             if (isIOS) {
-                // iOS specific recording
-                await recorder.initAudio();
-                await recorder.initWorker();
-                setIsRecording(true);
-                recorder.startRecording();
-                console.log('iOS recording started');
+                // For iOS, try to use MP4 container
+                if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    options = { mimeType: 'audio/mp4' };
+                }
             } else {
-                // Existing recording logic for other platforms
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        sampleRate: 44100,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
-                });
-                
-                streamRef.current = stream;
-                const recorder = new MediaRecorder(stream);
-                mediaRecorderRef.current = recorder;
-                chunksRef.current = [];
+                // For other browsers, use WebM
+                if (MediaRecorder.isTypeSupported('audio/webm')) {
+                    options = { mimeType: 'audio/webm' };
+                }
+            }
 
-                recorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) {
-                        chunksRef.current.push(e.data);
-                    }
-                };
+            const recorder = new MediaRecorder(stream, options);
+            mediaRecorderRef.current = recorder;
+            chunksRef.current = [];
 
-                recorder.onstop = async () => {
-                    const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                    await sendAudioToServer(audioBlob);
+            recorder.ondataavailable = (e) => {
+                console.log('Data available:', e.data.size);
+                if (e.data.size > 0) {
+                    chunksRef.current.push(e.data);
+                }
+            };
+
+            recorder.onstop = async () => {
+                console.log('Recording stopped');
+                try {
+                    const mimeType = isIOS ? 'audio/mp4' : 'audio/webm';
+                    const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+                    console.log('Created blob:', audioBlob.size);
+
+                    if (audioBlob.size > 0) {
+                        await sendAudioToServer(audioBlob);
+                    } else {
+                        throw new Error('No audio data recorded');
+                    }
+                } catch (error) {
+                    console.error('Error processing recording:', error);
+                    toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to process recording"
+                    });
+                } finally {
                     stream.getTracks().forEach(track => track.stop());
                     streamRef.current = null;
                     setIsRecording(false);
-                };
+                }
+            };
 
-                recorder.start(1000);
-                setIsRecording(true);
-            }
+            // Use larger time slices for iOS
+            recorder.start(isIOS ? 1000 : 100);
+            setIsRecording(true);
+            console.log('Recording started');
+
         } catch (err) {
             console.error('Recording setup failed:', err);
             toast({
                 variant: "destructive",
                 title: "Recording Error",
-                description: "Please ensure microphone access is granted and try again"
+                description: isIOS 
+                    ? "Please ensure Safari is being used and microphone access is granted in Settings."
+                    : "Please check microphone permissions."
             });
+
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+            }
             setIsRecording(false);
         }
     };
 
-    const stopRecording = async () => {
+    const stopRecording = () => {
         try {
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            
-            if (isIOS) {
-                const blob = await recorder.stopRecording();
-                await sendAudioToServer(blob);
-            } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
                 mediaRecorderRef.current.stop();
+                setIsProcessing(true);
             }
-            
-            setIsProcessing(true);
             setIsRecording(false);
         } catch (err) {
             console.error('Error stopping recording:', err);
