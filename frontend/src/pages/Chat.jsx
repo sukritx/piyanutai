@@ -100,55 +100,103 @@ const Chat = () => {
 
     const startRecording = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Request permission with specific constraints for iOS
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 44100,
+                }
+            });
             streamRef.current = stream;
 
-            const options = {
-                mimeType: 'audio/webm;codecs=opus',
-                audioBitsPerSecond: 128000,
-            };
+            // Detect iOS device
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-            if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                    options.mimeType = 'audio/mp4';
-                } else {
-                    delete options.mimeType;
+            let options = {};
+            
+            if (isIOS) {
+                // iOS specific settings
+                if (MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2')) {
+                    options = {
+                        mimeType: 'audio/mp4;codecs=mp4a.40.2',
+                        audioBitsPerSecond: 128000
+                    };
+                } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    options = {
+                        mimeType: 'audio/mp4',
+                        audioBitsPerSecond: 128000
+                    };
+                }
+            } else {
+                // Non-iOS devices
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    options = {
+                        mimeType: 'audio/webm;codecs=opus',
+                        audioBitsPerSecond: 128000
+                    };
                 }
             }
+
+            console.log('Recording options:', options); // Debug log
 
             const recorder = new MediaRecorder(stream, options);
             mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
             recorder.ondataavailable = (e) => {
+                console.log('Data available:', e.data.size); // Debug log
                 if (e.data.size > 0) {
                     chunksRef.current.push(e.data);
                 }
             };
 
             recorder.onstop = async () => {
+                console.log('Recorder stopped'); // Debug log
                 let audioBlob;
-                if (options.mimeType) {
-                    audioBlob = new Blob(chunksRef.current, { type: options.mimeType });
-                } else {
-                    audioBlob = new Blob(chunksRef.current, { type: 'audio/mp4' });
-                }
+                const mimeType = isIOS ? 'audio/mp4' : 'audio/webm';
                 
-                await sendAudioToServer(audioBlob);
+                try {
+                    audioBlob = new Blob(chunksRef.current, { type: mimeType });
+                    console.log('Blob created:', audioBlob.size, audioBlob.type); // Debug log
+                    
+                    await sendAudioToServer(audioBlob);
+                } catch (error) {
+                    console.error('Error creating blob:', error);
+                    toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to process recording"
+                    });
+                }
                 
                 stream.getTracks().forEach(track => track.stop());
                 streamRef.current = null;
                 setIsRecording(false);
             };
 
+            // Smaller time slices for more frequent ondataavailable events
             recorder.start(100);
             setIsRecording(true);
+
+            // Add error handler for the recorder
+            recorder.onerror = (event) => {
+                console.error('Recorder error:', event.error);
+                toast({
+                    variant: "destructive",
+                    title: "Recording Error",
+                    description: "An error occurred while recording"
+                });
+            };
+
         } catch (err) {
             console.error('Failed to start recording:', err);
             toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Failed to start recording. Please ensure microphone access is granted."
+                description: isIOS 
+                    ? "Failed to start recording on iOS. Please ensure microphone access is granted in Settings."
+                    : "Failed to start recording. Please ensure microphone access is granted."
             });
         }
     };
@@ -173,10 +221,19 @@ const Chat = () => {
 
         try {
             const formData = new FormData();
-            const audioFile = new File([audioBlob], 'audio.webm', {
-                type: 'audio/webm',
-                lastModified: Date.now()
-            });
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            // Create file with appropriate extension and type
+            const audioFile = new File(
+                [audioBlob],
+                isIOS ? 'audio.m4a' : 'audio.webm',
+                {
+                    type: isIOS ? 'audio/mp4' : 'audio/webm',
+                    lastModified: Date.now()
+                }
+            );
+            
+            console.log('Sending file:', audioFile.type, audioFile.size); // Debug log
             
             formData.append('audioBlob', audioFile);
             formData.append('chatId', chatId);
