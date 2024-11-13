@@ -100,74 +100,62 @@ const Chat = () => {
 
     const startRecording = async () => {
         try {
-            // Detect iOS device
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            
-            // iOS-specific audio constraints
+            console.log('Device is iOS:', isIOS);
+
+            // iOS-specific constraints
             const constraints = {
                 audio: {
-                    echoCancellation: isIOS ? false : true,
-                    noiseSuppression: isIOS ? false : true,
-                    autoGainControl: isIOS ? false : true,
-                    sampleRate: isIOS ? 44100 : undefined,
-                    channelCount: isIOS ? 1 : undefined,
+                    // Simplified constraints for iOS
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
                 }
             };
 
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             streamRef.current = stream;
 
-            let options = {};
-            
+            // For iOS Safari, we need to use a different approach
             if (isIOS) {
-                // Try different MIME types for iOS
-                const mimeTypes = [
-                    'audio/mp4',
-                    'audio/aac',
-                    'audio/x-m4a',
-                    'audio/m4a',
-                    'audio/mp4;codecs=mp4a.40.2'
-                ];
-
-                for (const mimeType of mimeTypes) {
-                    if (MediaRecorder.isTypeSupported(mimeType)) {
-                        options = {
-                            mimeType: mimeType,
-                            audioBitsPerSecond: 128000
-                        };
-                        console.log('Using MIME type:', mimeType);
-                        break;
-                    }
+                try {
+                    // Try the basic audio/mp4 format first
+                    const recorder = new MediaRecorder(stream, {
+                        mimeType: 'audio/mp4'
+                    });
+                    mediaRecorderRef.current = recorder;
+                } catch (e) {
+                    console.log('Failed to create MediaRecorder with audio/mp4, trying without mimeType');
+                    // If that fails, let the browser choose the format
+                    const recorder = new MediaRecorder(stream);
+                    mediaRecorderRef.current = recorder;
                 }
             } else {
-                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                    options = {
-                        mimeType: 'audio/webm;codecs=opus',
-                        audioBitsPerSecond: 128000
-                    };
-                }
+                // Non-iOS devices use webm
+                const recorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                mediaRecorderRef.current = recorder;
             }
 
-            console.log('Recording options:', options);
-            console.log('Is iOS device:', isIOS);
-
-            const recorder = new MediaRecorder(stream, options);
-            mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
-            recorder.ondataavailable = (e) => {
-                console.log('Data available event fired');
-                console.log('Chunk size:', e.data.size);
+            mediaRecorderRef.current.ondataavailable = (e) => {
+                console.log('Data available:', e.data.size, 'bytes');
                 if (e.data.size > 0) {
                     chunksRef.current.push(e.data);
                 }
             };
 
-            recorder.onstop = async () => {
-                console.log('Recorder stopped');
+            mediaRecorderRef.current.onstop = async () => {
+                console.log('MediaRecorder stopped');
                 try {
-                    const mimeType = isIOS ? 'audio/mp4' : 'audio/webm';
-                    const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+                    const audioBlob = new Blob(chunksRef.current, {
+                        type: isIOS ? 'audio/mp4' : 'audio/webm'
+                    });
+
                     console.log('Created blob:', {
                         size: audioBlob.size,
                         type: audioBlob.type
@@ -192,20 +180,10 @@ const Chat = () => {
                 }
             };
 
-            recorder.onerror = (event) => {
-                console.error('Recorder error:', event.error);
-                toast({
-                    variant: "destructive",
-                    title: "Recording Error",
-                    description: `Recording error: ${event.error.message || 'Unknown error'}`
-                });
-            };
-
-            // Use smaller time slices for iOS
-            recorder.start(isIOS ? 50 : 100);
+            // Record in smaller chunks for iOS
+            mediaRecorderRef.current.start(isIOS ? 10 : 100);
             setIsRecording(true);
-
-            console.log('Recording started successfully');
+            console.log('Recording started with recorder:', mediaRecorderRef.current);
 
         } catch (err) {
             console.error('Recording setup failed:', err);
@@ -215,7 +193,7 @@ const Chat = () => {
                 variant: "destructive",
                 title: "Recording Error",
                 description: isIOS 
-                    ? "iOS recording failed. Please ensure Safari is being used and microphone access is granted in Settings."
+                    ? "Please ensure Safari is being used and microphone access is granted in Settings. Try closing and reopening Safari if issues persist."
                     : "Failed to start recording. Please check microphone permissions."
             });
 
@@ -249,11 +227,14 @@ const Chat = () => {
             const formData = new FormData();
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
-            // Create file with appropriate extension and type
-            const fileName = isIOS ? 'audio.m4a' : 'audio.webm';
+            // For iOS, try to create an audio file with a more compatible format
+            const fileName = isIOS ? `audio_${Date.now()}.m4a` : `audio_${Date.now()}.webm`;
             const fileType = isIOS ? 'audio/mp4' : 'audio/webm';
             
-            const audioFile = new File([audioBlob], fileName, {
+            // Create a new blob with the correct type if needed
+            const processedBlob = isIOS ? new Blob([audioBlob], { type: 'audio/mp4' }) : audioBlob;
+            
+            const audioFile = new File([processedBlob], fileName, {
                 type: fileType,
                 lastModified: Date.now()
             });
@@ -266,6 +247,7 @@ const Chat = () => {
             
             formData.append('audioBlob', audioFile);
             formData.append('chatId', chatId);
+            formData.append('isIOS', isIOS);
 
             const response = await api.post('/api/v1/chat/message', formData, {
                 headers: {
@@ -316,6 +298,9 @@ const Chat = () => {
             setMessageCount(prev => prev + 1);
         } catch (err) {
             console.error('Audio processing error:', err);
+            if (err.response) {
+                console.error('Server response:', err.response.data);
+            }
             toast({
                 variant: "destructive",
                 title: "Error",
