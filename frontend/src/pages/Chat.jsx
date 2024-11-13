@@ -103,54 +103,58 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
-            // iOS-specific constraints
+            // Request microphone permission first
+            const permissionResult = await navigator.permissions.query({ name: 'microphone' });
+            console.log('Microphone permission status:', permissionResult.state);
+
+            // Basic audio constraints that work well with iOS Safari
             const constraints = {
-                audio: {
-                    // Simplified constraints for iOS
-                    sampleRate: 44100,
-                    channelCount: 1,
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }
+                audio: true,
+                video: false
             };
 
+            console.log('Requesting media with constraints:', constraints);
+
+            // Get audio stream
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             streamRef.current = stream;
+            console.log('Got media stream:', stream.getTracks());
 
-            // For iOS Safari, we need to use a different approach
+            let recorder;
             if (isIOS) {
-                try {
-                    // Try the basic audio/mp4 format first
-                    const recorder = new MediaRecorder(stream, {
-                        mimeType: 'audio/mp4'
-                    });
-                    mediaRecorderRef.current = recorder;
-                } catch (e) {
-                    console.log('Failed to create MediaRecorder with audio/mp4, trying without mimeType');
-                    // If that fails, let the browser choose the format
-                    const recorder = new MediaRecorder(stream);
-                    mediaRecorderRef.current = recorder;
-                }
+                // For iOS, let the browser choose the format
+                recorder = new MediaRecorder(stream);
+                console.log('Created iOS recorder with default settings');
             } else {
-                // Non-iOS devices use webm
-                const recorder = new MediaRecorder(stream, {
+                // For other browsers, specify webm
+                recorder = new MediaRecorder(stream, {
                     mimeType: 'audio/webm;codecs=opus'
                 });
-                mediaRecorderRef.current = recorder;
+                console.log('Created non-iOS recorder with webm format');
             }
 
+            mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
-            mediaRecorderRef.current.ondataavailable = (e) => {
+            recorder.ondataavailable = (e) => {
                 console.log('Data available:', e.data.size, 'bytes');
                 if (e.data.size > 0) {
                     chunksRef.current.push(e.data);
                 }
             };
 
-            mediaRecorderRef.current.onstop = async () => {
-                console.log('MediaRecorder stopped');
+            recorder.onerror = (e) => {
+                console.error('Recorder error:', e.error);
+                toast({
+                    variant: "destructive",
+                    title: "Recording Error",
+                    description: `Recording failed: ${e.error.message}`
+                });
+                stopRecording();
+            };
+
+            recorder.onstop = async () => {
+                console.log('Recorder stopped');
                 try {
                     const audioBlob = new Blob(chunksRef.current, {
                         type: isIOS ? 'audio/mp4' : 'audio/webm'
@@ -180,21 +184,30 @@ const Chat = () => {
                 }
             };
 
-            // Record in smaller chunks for iOS
-            mediaRecorderRef.current.start(isIOS ? 10 : 100);
+            // Start recording with a very small timeslice for iOS
+            recorder.start(10);
             setIsRecording(true);
-            console.log('Recording started with recorder:', mediaRecorderRef.current);
+            console.log('Recording started');
 
         } catch (err) {
             console.error('Recording setup failed:', err);
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
+            let errorMessage = "Failed to start recording. ";
+            if (err.name === 'NotAllowedError') {
+                errorMessage += "Please grant microphone permission in your browser settings.";
+            } else if (err.name === 'NotFoundError') {
+                errorMessage += "No microphone found.";
+            } else {
+                errorMessage += isIOS 
+                    ? "Please ensure Safari is being used and microphone access is granted in Settings."
+                    : "Please check microphone permissions.";
+            }
+
             toast({
                 variant: "destructive",
                 title: "Recording Error",
-                description: isIOS 
-                    ? "Please ensure Safari is being used and microphone access is granted in Settings. Try closing and reopening Safari if issues persist."
-                    : "Failed to start recording. Please check microphone permissions."
+                description: errorMessage
             });
 
             if (streamRef.current) {
@@ -544,7 +557,15 @@ const Chat = () => {
                             {/* Record Button */}
                             {!isRecording && (
                                 <Button
-                                    onClick={startRecording}
+                                    onClick={(e) => {
+                                        e.preventDefault(); // Prevent any default behavior
+                                        e.stopPropagation(); // Stop event propagation
+                                        startRecording();
+                                    }}
+                                    onTouchStart={(e) => {
+                                        e.preventDefault(); // Prevent default touch behavior
+                                        e.stopPropagation();
+                                    }}
                                     disabled={isProcessing || isRecording}
                                     size="lg"
                                     className="h-12 sm:h-14 px-4 sm:px-6 bg-[#171717] hover:bg-[#2d2d2d] text-white flex items-center gap-2"
