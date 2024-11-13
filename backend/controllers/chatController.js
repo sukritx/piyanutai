@@ -37,16 +37,26 @@ const sendMessage = async (req, res) => {
             return res.status(404).json({ message: 'Chat not found' });
         }
 
+        // Log the file details for debugging
+        logger.info('Received audio file:', {
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            originalName: req.file.originalname
+        });
+
         // Ensure temp directory exists
         const tempDir = path.join(__dirname, '..', 'temp');
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        // Write buffer to temporary file
+        // Write buffer to temporary file with appropriate extension
+        const fileExtension = req.file.mimetype.includes('mp4') ? '.m4a' : '.webm';
+        const tempFilePath = path.join(tempDir, `${Date.now()}${fileExtension}`);
+        
         fs.writeFileSync(tempFilePath, req.file.buffer);
 
-        // Get transcription
+        // Get transcription with explicit mime type
         const transcription = await openai.audio.transcriptions.create({
             file: fs.createReadStream(tempFilePath),
             model: "whisper-1",
@@ -140,6 +150,7 @@ const sendMessage = async (req, res) => {
             error: error.message 
         });
     } finally {
+        // Clean up temporary files
         if (fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
         }

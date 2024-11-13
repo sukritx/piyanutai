@@ -15,6 +15,17 @@ const upload = multer({
     storage: storage,
     limits: {
         fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept both webm and mp4 audio
+        if (file.mimetype === 'audio/webm' || 
+            file.mimetype === 'audio/mp4' || 
+            file.mimetype === 'audio/m4a' ||
+            file.mimetype === 'audio/x-m4a') {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only audio files are allowed.'));
+        }
     }
 }).single('audioBlob');
 

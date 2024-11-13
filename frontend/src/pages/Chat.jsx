@@ -103,7 +103,20 @@ const Chat = () => {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
 
-            const recorder = new MediaRecorder(stream);
+            const options = {
+                mimeType: 'audio/webm;codecs=opus',
+                audioBitsPerSecond: 128000,
+            };
+
+            if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    options.mimeType = 'audio/mp4';
+                } else {
+                    delete options.mimeType;
+                }
+            }
+
+            const recorder = new MediaRecorder(stream, options);
             mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
@@ -114,7 +127,13 @@ const Chat = () => {
             };
 
             recorder.onstop = async () => {
-                const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                let audioBlob;
+                if (options.mimeType) {
+                    audioBlob = new Blob(chunksRef.current, { type: options.mimeType });
+                } else {
+                    audioBlob = new Blob(chunksRef.current, { type: 'audio/mp4' });
+                }
+                
                 await sendAudioToServer(audioBlob);
                 
                 stream.getTracks().forEach(track => track.stop());
@@ -122,14 +141,14 @@ const Chat = () => {
                 setIsRecording(false);
             };
 
-            recorder.start();
+            recorder.start(100);
             setIsRecording(true);
         } catch (err) {
             console.error('Failed to start recording:', err);
             toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Failed to start recording"
+                description: "Failed to start recording. Please ensure microphone access is granted."
             });
         }
     };
