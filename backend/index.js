@@ -114,18 +114,6 @@ app.use((err, req, res, next) => {
 // General error handler
 app.use(errorHandler);
 
-// Handling uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  process.exit(1);
-});
-
-// Handling unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
 // HTTPS redirect for production
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
@@ -141,11 +129,31 @@ if (process.env.NODE_ENV === 'production') {
 app.use(helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "'unsafe-inline'"],
+    scriptSrc: ["'self'"],
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", "data:", "https:"],
+    connectSrc: ["'self'"],
+    fontSrc: ["'self'", "https:", "data:"],
+    objectSrc: ["'none'"],
+    mediaSrc: ["'self'"],
+    frameSrc: ["'none'"],
+    sandbox: ['allow-forms', 'allow-scripts', 'allow-same-origin'],
+    reportUri: '/api/v1/csp-report',
+    frameAncestors: ["'none'"],
+    formAction: ["'self'"],
+    upgradeInsecureRequests: [],
+    blockAllMixedContent: []
   },
+  reportOnly: false
 }));
+
+// Add CSP violation reporting endpoint if you want to monitor violations
+app.post('/api/v1/csp-report', (req, res) => {
+  if (req.body) {
+    logger.warn('CSP Violation:', req.body);
+  }
+  res.status(204).end();
+});
 
 // Add after CSRF middleware
 app.use((req, res, next) => {
