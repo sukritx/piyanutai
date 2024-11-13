@@ -143,15 +143,6 @@ const Chat = () => {
     };
 
     const sendAudioToServer = async (audioBlob) => {
-        if (messageCount >= 5) {
-            toast({
-                title: "Chat limit reached",
-                description: "Please start a new chat to continue asking questions",
-                variant: "warning"
-            });
-            return;
-        }
-
         if (!chatId) {
             toast({
                 variant: "destructive",
@@ -367,7 +358,7 @@ const Chat = () => {
                                                     {formatDistanceToNow(new Date(chat.createdAt), { addSuffix: true })}
                                                 </span>
                                                 <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
-                                                    {chat.messages.length / 2}/5
+                                                    {chat.messages.length / 2}
                                                 </span>
                                             </div>
                                             <p className="text-sm text-gray-600 line-clamp-2 hidden sm:block">
@@ -405,12 +396,6 @@ const Chat = () => {
 
                 {/* Messages Area */}
                 <ScrollArea className="flex-1 p-4 lg:p-6 bg-gray-50">
-                    {messageCount >= 5 && (
-                        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
-                            Chat limit reached (5 questions). Please start a new chat to continue.
-                        </div>
-                    )}
-                    
                     {currentChatId ? (
                         <div className="space-y-6">
                             {chats
@@ -473,7 +458,7 @@ const Chat = () => {
                             {!isRecording && (
                                 <Button
                                     onClick={startRecording}
-                                    disabled={isProcessing || isRecording || messageCount >= 5}
+                                    disabled={isProcessing || isRecording}
                                     size="lg"
                                     className="h-12 sm:h-14 px-4 sm:px-6 bg-[#171717] hover:bg-[#2d2d2d] text-white flex items-center gap-2"
                                 >
@@ -503,16 +488,6 @@ const Chat = () => {
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 <span className="text-sm font-medium">Processing...</span>
                             </div>
-                        )}
-
-                        {messageCount >= 5 && (
-                            <Button
-                                onClick={createNewChat}
-                                variant="default"
-                                className="mt-2 bg-[#171717] hover:bg-[#2d2d2d] text-white"
-                            >
-                                Start New Chat
-                            </Button>
                         )}
                     </div>
                 </div>

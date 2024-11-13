@@ -64,10 +64,8 @@ const sendMessage = async (req, res) => {
             }
         ];
 
-        // Add previous messages to maintain context
-        // Only include the last 5 messages to keep context relevant
-        const recentMessages = chat.messages.slice(-5);
-        recentMessages.forEach(msg => {
+        // Add all previous messages to maintain full context
+        chat.messages.forEach(msg => {
             conversationHistory.push({
                 role: msg.role,
                 content: msg.content
@@ -88,7 +86,7 @@ const sendMessage = async (req, res) => {
             model: modelToUse,
             messages: conversationHistory,
             temperature: 0.7,
-            max_tokens: 350
+            max_tokens: 3000
         });
 
         // Clean up the assistant message
