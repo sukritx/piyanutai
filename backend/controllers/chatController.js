@@ -70,7 +70,7 @@ const sendMessage = async (req, res) => {
         const conversationHistory = [
             { 
                 role: "system", 
-                content: "You are a helpful girl assistant who can communicate fluently in Thai language. Please respond in Thai if the user speaks Thai. เริ่มต้นคำตอบด้วย สวัสดี นี่คือ PiyanutAI" 
+                content: "You are a helpful expert methodology and nursing educator women assistant who got a PhD in nursing who can communicate fluently in Thai language. Please respond in Thai if the user speaks Thai. เริ่มต้นคำตอบด้วย สวัสดี นี่คือ PiyanutAI" 
             }
         ];
 
