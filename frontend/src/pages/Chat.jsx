@@ -59,32 +59,38 @@ const Chat = () => {
     useEffect(() => {
         if (!loading && !isAuthenticated) {
             navigate('/signin');
-        }
-    }, [isAuthenticated, loading, navigate]);
-
-    useEffect(() => {
-        const fetchChats = async () => {
-            try {
-                const response = await api.get('/api/v1/chat');
-                setChats(response.data);
-                if (response.data.length > 0) {
-                    setCurrentChatId(response.data[0]._id);
-                    setChatId(response.data[0]._id);
+        } else if (isAuthenticated) {
+            // Fetch chats and create a new one if none exist
+            const fetchChats = async () => {
+                try {
+                    const response = await api.get('/api/v1/chat');
+                    setChats(response.data);
+                    
+                    if (response.data.length === 0) {
+                        // No existing chats, create a new one
+                        const newChatResponse = await api.post('/api/v1/chat');
+                        const newChat = newChatResponse.data;
+                        setChats([newChat]);
+                        setCurrentChatId(newChat._id);
+                        setChatId(newChat._id);
+                    } else {
+                        // Use the most recent chat
+                        setCurrentChatId(response.data[0]._id);
+                        setChatId(response.data[0]._id);
+                    }
+                } catch (err) {
+                    console.error('Error fetching/creating chats:', err);
+                    toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to initialize chat"
+                    });
                 }
-            } catch (err) {
-                console.error('Error fetching chats:', err);
-                toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: "Failed to load chat history"
-                });
-            }
-        };
+            };
 
-        if (isAuthenticated) {
             fetchChats();
         }
-    }, [isAuthenticated, toast]);
+    }, [isAuthenticated, loading, navigate, toast]);
 
     if (loading) {
         return (
