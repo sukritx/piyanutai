@@ -22,59 +22,28 @@ const createChat = async (req, res) => {
 };
 
 const sendMessage = async (req, res) => {
-    const tempFilePath = path.join(__dirname, '..', 'temp', `${Date.now()}.webm`);
-    
     try {
-        const { chatId } = req.body;
+        const { chatId, message } = req.body;
         
-        if (!req.file) {
-            return res.status(400).json({ message: 'No audio file provided' });
+        if (!message) {
+            return res.status(400).json({ message: 'No message provided' });
         }
 
-        // Get existing chat and messages
+        // Get existing chat
         const chat = await Chat.findById(chatId);
         if (!chat) {
             return res.status(404).json({ message: 'Chat not found' });
         }
 
-        // Log the file details for debugging
-        logger.info('Received audio file:', {
-            mimetype: req.file.mimetype,
-            size: req.file.size,
-            originalName: req.file.originalname
-        });
-
-        // Ensure temp directory exists
-        const tempDir = path.join(__dirname, '..', 'temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        // Write buffer to temporary file with appropriate extension
-        const fileExtension = req.file.mimetype.includes('mp4') ? '.m4a' : '.webm';
-        const tempFilePath = path.join(tempDir, `${Date.now()}${fileExtension}`);
-        
-        fs.writeFileSync(tempFilePath, req.file.buffer);
-
-        // Get transcription with explicit mime type
-        const transcription = await openai.audio.transcriptions.create({
-            file: fs.createReadStream(tempFilePath),
-            model: "whisper-1",
-            language: "th",
-            response_format: "text"
-        });
-
-        const userMessage = transcription;
-
         // Prepare conversation history
         const conversationHistory = [
             { 
                 role: "system", 
-                content: "You are a helpful expert methodology and nursing educator women assistant who got a PhD in nursing who can communicate fluently in Thai language. Please respond in Thai if the user speaks Thai. เริ่มต้นคำตอบด้วย สวัสดี นี่คือ PiyanutAI" 
+                content: "You are a helpful expert methodology and nursing educator women assistant created by Piyanut Xuto (ดร. ปิยะนุช ชูโต) who got a PhD in nursing who can communicate fluently in Thai language. Please respond in Thai if the user speaks Thai. เริ่มต้นคำตอบด้วย สวัสดี นี่คือ PiyanutAI" 
             }
         ];
 
-        // Add all previous messages to maintain full context
+        // Add previous messages
         chat.messages.forEach(msg => {
             conversationHistory.push({
                 role: msg.role,
@@ -82,16 +51,14 @@ const sendMessage = async (req, res) => {
             });
         });
 
-        // Add current user message
+        // Add current message
         conversationHistory.push({
             role: "user",
-            content: userMessage
+            content: message
         });
 
-        // Use default model if fine-tuned model is not set
+        // Get chat completion
         const modelToUse = process.env.OPENAI_FINE_TUNED_MODEL || "gpt-3.5-turbo";
-
-        // Get chat completion with conversation history
         const completion = await openai.chat.completions.create({
             model: modelToUse,
             messages: conversationHistory,
@@ -99,25 +66,7 @@ const sendMessage = async (req, res) => {
             max_tokens: 3000
         });
 
-        // Clean up the assistant message
-        const assistantMessage = completion.choices[0].message.content
-            .replace(/\*\*/g, '')
-            .replace(/\*/g, '')
-            .replace(/\_\_/g, '')
-            .replace(/\_/g, '')
-            .replace(/\#\#/g, '')
-            .replace(/\#/g, '')
-            .trim();
-
-        // Convert to speech
-        const speechResponse = await openai.audio.speech.create({
-            model: "tts-1",
-            voice: "nova",
-            input: assistantMessage,
-            speed: 1.0,
-        });
-
-        const audioData = Buffer.from(await speechResponse.arrayBuffer());
+        const assistantMessage = completion.choices[0].message.content.trim();
 
         // Save messages to database
         await Chat.findByIdAndUpdate(
@@ -126,7 +75,7 @@ const sendMessage = async (req, res) => {
                 $push: {
                     messages: [
                         { 
-                            content: userMessage, 
+                            content: message, 
                             role: 'user' 
                         },
                         { 
@@ -139,21 +88,14 @@ const sendMessage = async (req, res) => {
         );
 
         res.json({
-            message: assistantMessage,
-            audio: audioData.toString('base64'),
-            transcription: userMessage
+            message: assistantMessage
         });
     } catch (error) {
         logger.error('Error in chat:', error);
         res.status(500).json({ 
-            message: 'Error processing chat message',
+            message: 'Error processing message',
             error: error.message 
         });
-    } finally {
-        // Clean up temporary files
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
     }
 };
 
