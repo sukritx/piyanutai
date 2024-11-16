@@ -10,6 +10,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
 import Recorder from 'recorder-js';
 
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
 const getMimeType = () => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
@@ -167,6 +169,25 @@ const Chat = () => {
             setIsRecording(true);
             console.log('Recording started');
 
+            // Add recording time limit
+            const RECORDING_TIMEOUT = 60000; // 60 seconds
+            const recordingTimeout = setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                    toast({
+                        title: "Recording stopped",
+                        description: "Maximum recording duration reached (60 seconds)",
+                    });
+                }
+            }, RECORDING_TIMEOUT);
+
+            // Clear timeout when recording stops
+            const originalStop = recorderRef.current.stop;
+            recorderRef.current.stop = async () => {
+                clearTimeout(recordingTimeout);
+                return await originalStop.call(recorderRef.current);
+            };
+
         } catch (err) {
             console.error('Recording setup failed:', err);
             
@@ -242,6 +263,16 @@ const Chat = () => {
             return;
         }
 
+        // Check file size
+        if (audioBlob.size > MAX_FILE_SIZE) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Audio file is too large. Maximum size is 50MB."
+            });
+            return;
+        }
+
         try {
             setIsProcessing(true);
             const formData = new FormData();
@@ -252,7 +283,14 @@ const Chat = () => {
                              mimeType.includes('webm') ? '.webm' : '.wav';
             const fileName = `audio_${timestamp}${extension}`;
             
-            const audioFile = new File([audioBlob], fileName, {
+            // Compress audio if needed
+            let processedBlob = audioBlob;
+            if (audioBlob.size > MAX_FILE_SIZE) {
+                // You might want to add audio compression logic here
+                console.log('Audio file needs compression');
+            }
+            
+            const audioFile = new File([processedBlob], fileName, {
                 type: mimeType,
                 lastModified: timestamp
             });
@@ -271,7 +309,9 @@ const Chat = () => {
                     'Content-Type': 'multipart/form-data',
                 },
                 transformRequest: [(data) => data],
-                timeout: 60000
+                timeout: 60000,
+                maxContentLength: MAX_FILE_SIZE,
+                maxBodyLength: MAX_FILE_SIZE
             });
 
             setChats(prevChats => prevChats.map(chat => 
@@ -294,10 +334,16 @@ const Chat = () => {
 
         } catch (err) {
             console.error('Audio processing error:', err);
+            let errorMessage = "Failed to process audio. Please try again.";
+            
+            if (err.response?.status === 413) {
+                errorMessage = "Audio file is too large. Please record a shorter message.";
+            }
+            
             toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Failed to process audio. Please try again."
+                description: errorMessage
             });
         } finally {
             setIsProcessing(false);
