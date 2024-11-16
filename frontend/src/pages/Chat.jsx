@@ -14,16 +14,11 @@ const Chat = () => {
     const { isAuthenticated, loading } = useAuth();
     const { toast } = useToast();
 
-    const [isRecording, setIsRecording] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [response, setResponse] = useState('');
-    const [chatId, setChatId] = useState(null);
     const [currentAudioBuffer, setCurrentAudioBuffer] = useState(null);
     const [hasPlayed, setHasPlayed] = useState(false);
-    const [chats, setChats] = useState([]);
-    const [currentChatId, setCurrentChatId] = useState(null);
     const [messageCount, setMessageCount] = useState(0);
 
     const mediaRecorderRef = useRef(null);
@@ -103,34 +98,25 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
-            // Request microphone access with basic constraints
             const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: isIOS ? 44100 : undefined,
-                    channelCount: isIOS ? 1 : 2,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
+                audio: true,
+                video: false
             });
             
             streamRef.current = stream;
             console.log('Got audio stream');
 
-            // Create MediaRecorder with basic configuration
             let options = {};
             
-            if (isIOS) {
-                // For iOS, try to use MP4 container
-                if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                    options = { mimeType: 'audio/mp4' };
-                }
-            } else {
-                // For other browsers, use WebM
-                if (MediaRecorder.isTypeSupported('audio/webm')) {
-                    options = { mimeType: 'audio/webm' };
-                }
+            if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                options = { mimeType: 'audio/mp4' };
+            } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+                options = { mimeType: 'video/mp4' };
+            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/webm' };
             }
+
+            console.log('Using recording options:', options);
 
             const recorder = new MediaRecorder(stream, options);
             mediaRecorderRef.current = recorder;
@@ -146,8 +132,9 @@ const Chat = () => {
             recorder.onstop = async () => {
                 console.log('Recording stopped');
                 try {
-                    const mimeType = isIOS ? 'audio/mp4' : 'audio/webm';
-                    const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+                    const audioBlob = new Blob(chunksRef.current, { 
+                        type: options.mimeType || 'audio/webm' 
+                    });
                     console.log('Created blob:', audioBlob.size);
 
                     if (audioBlob.size > 0) {
@@ -169,17 +156,18 @@ const Chat = () => {
                 }
             };
 
-            // Use larger time slices for iOS
             recorder.start(isIOS ? 1000 : 100);
             setIsRecording(true);
             console.log('Recording started');
 
         } catch (err) {
             console.error('Recording setup failed:', err);
+            const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
             toast({
                 variant: "destructive",
                 title: "Recording Error",
-                description: isIOS 
+                description: isIOSDevice 
                     ? "Please ensure Safari is being used and microphone access is granted in Settings."
                     : "Please check microphone permissions."
             });
