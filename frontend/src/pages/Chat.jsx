@@ -8,6 +8,7 @@ import api from '../utils/api';
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
+import Recorder from 'recorder-js';
 
 const Chat = () => {
     const navigate = useNavigate();
@@ -20,18 +21,8 @@ const Chat = () => {
     const [currentChatId, setCurrentChatId] = useState(null);
     const [chatId, setChatId] = useState(null);
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [transcript, setTranscript] = useState('');
-    const [response, setResponse] = useState('');
-    const [currentAudioBuffer, setCurrentAudioBuffer] = useState(null);
-    const [hasPlayed, setHasPlayed] = useState(false);
-    const [messageCount, setMessageCount] = useState(0);
-
-    const mediaRecorderRef = useRef(null);
+    const recorderRef = useRef(null);
     const streamRef = useRef(null);
-    const chunksRef = useRef([]);
-    const audioSourceRef = useRef(null);
-    const audioContextRef = useRef(null);
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -47,7 +38,6 @@ const Chat = () => {
                 if (response.data.length > 0) {
                     setCurrentChatId(response.data[0]._id);
                     setChatId(response.data[0]._id);
-                    setMessageCount(response.data[0].messages.length / 2);
                 }
             } catch (err) {
                 console.error('Error fetching chats:', err);
@@ -86,9 +76,6 @@ const Chat = () => {
             setChats(prevChats => [newChat, ...prevChats]);
             setCurrentChatId(newChat._id);
             setChatId(newChat._id);
-            setMessageCount(0);
-            setTranscript('');
-            setResponse('');
         } catch (err) {
             console.error('Error creating new chat:', err);
             toast({
@@ -104,116 +91,34 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
-            // Log available MIME types for debugging
-            console.log('Supported MIME Types:', {
-                audioMP4: MediaRecorder.isTypeSupported('audio/mp4'),
-                audioAAC: MediaRecorder.isTypeSupported('audio/aac'),
-                audioWAV: MediaRecorder.isTypeSupported('audio/wav'),
-                audioWebM: MediaRecorder.isTypeSupported('audio/webm')
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
             });
 
-            // iOS-specific audio constraints
-            const constraints = {
-                audio: {
-                    sampleRate: isIOS ? 44100 : undefined,
-                    channelCount: isIOS ? 1 : undefined,
-                    echoCancellation: isIOS ? false : true,
-                    noiseSuppression: isIOS ? false : true,
-                    autoGainControl: isIOS ? false : true
-                }
-            };
-
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             streamRef.current = stream;
-            console.log('Got audio stream');
 
-            // Try different MIME types for iOS
-            let options = {};
-            if (isIOS) {
-                const mimeTypes = [
-                    'audio/mp4',
-                    'audio/aac',
-                    'audio/wav',
-                    'video/mp4',
-                    'audio/webm'
-                ];
+            const audioContext = new AudioContext();
+            recorderRef.current = new Recorder(audioContext, {
+                onAnalysed: data => console.log('Recording data:', data)
+            });
 
-                for (const mimeType of mimeTypes) {
-                    if (MediaRecorder.isTypeSupported(mimeType)) {
-                        options = { 
-                            mimeType,
-                            audioBitsPerSecond: 128000
-                        };
-                        console.log('Using MIME type:', mimeType);
-                        break;
-                    }
-                }
-            } else {
-                options = { 
-                    mimeType: 'audio/webm',
-                    audioBitsPerSecond: 128000
-                };
-            }
-
-            console.log('Final recording options:', options);
-
-            const recorder = new MediaRecorder(stream, options);
-            mediaRecorderRef.current = recorder;
-            chunksRef.current = [];
-
-            recorder.ondataavailable = (e) => {
-                console.log('Data chunk received:', e.data.size, 'bytes');
-                if (e.data.size > 0) {
-                    chunksRef.current.push(e.data);
-                }
-            };
-
-            recorder.onstop = async () => {
-                console.log('Recording stopped');
-                try {
-                    const mimeType = isIOS ? options.mimeType || 'audio/mp4' : 'audio/webm';
-                    const audioBlob = new Blob(chunksRef.current, { type: mimeType });
-                    console.log('Created blob:', {
-                        size: audioBlob.size,
-                        type: mimeType
-                    });
-
-                    if (audioBlob.size > 0) {
-                        await sendAudioToServer(audioBlob);
-                    } else {
-                        throw new Error('No audio data recorded');
-                    }
-                } catch (error) {
-                    console.error('Error processing recording:', error);
-                    toast({
-                        variant: "destructive",
-                        title: "Error",
-                        description: isIOS 
-                            ? "Recording failed on iOS. Please ensure Safari is being used and try again."
-                            : "Failed to process recording"
-                    });
-                } finally {
-                    stream.getTracks().forEach(track => track.stop());
-                    streamRef.current = null;
-                    setIsRecording(false);
-                }
-            };
-
-            // Use larger time slices for iOS to ensure data is captured
-            recorder.start(isIOS ? 1000 : 100);
+            await recorderRef.current.init(stream);
+            await recorderRef.current.start();
             setIsRecording(true);
-            console.log('Recording started with recorder state:', recorder.state);
+            console.log('Recording started');
 
         } catch (err) {
             console.error('Recording setup failed:', err);
-            const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            
             toast({
                 variant: "destructive",
                 title: "Recording Error",
-                description: isIOSDevice 
-                    ? "Please ensure Safari is being used, microphone access is granted, and iOS is up to date."
-                    : "Please check microphone permissions."
+                description: "Please ensure microphone access is granted and try again"
             });
 
             if (streamRef.current) {
@@ -224,13 +129,18 @@ const Chat = () => {
         }
     };
 
-    const stopRecording = () => {
+    const stopRecording = async () => {
         try {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                mediaRecorderRef.current.stop();
+            if (recorderRef.current) {
                 setIsProcessing(true);
+                const { blob } = await recorderRef.current.stop();
+                await sendAudioToServer(blob);
+
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                }
             }
-            setIsRecording(false);
         } catch (err) {
             console.error('Error stopping recording:', err);
             toast({
@@ -238,6 +148,9 @@ const Chat = () => {
                 title: "Error",
                 description: "Failed to stop recording"
             });
+        } finally {
+            setIsRecording(false);
+            setIsProcessing(false);
         }
     };
 
@@ -254,27 +167,23 @@ const Chat = () => {
         try {
             setIsProcessing(true);
             const formData = new FormData();
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
-            // Create file with appropriate type for iOS or other platforms
             const timestamp = Date.now();
-            const fileName = `audio_${timestamp}${isIOS ? '.mp3' : '.webm'}`;
-            const fileType = isIOS ? 'audio/mp3' : 'audio/webm';
+            const fileName = `audio_${timestamp}.wav`;
             
             const audioFile = new File([audioBlob], fileName, {
-                type: fileType,
+                type: 'audio/wav',
                 lastModified: timestamp
             });
             
             console.log('Sending file:', {
                 name: fileName,
-                type: fileType,
+                type: 'audio/wav',
                 size: audioFile.size
             });
             
             formData.append('audioBlob', audioFile);
             formData.append('chatId', chatId);
-            formData.append('isIOS', isIOS);
 
             const response = await api.post('/api/v1/chat/message', formData, {
                 headers: {
@@ -284,7 +193,6 @@ const Chat = () => {
                 timeout: 60000
             });
 
-            // Update UI with response
             setChats(prevChats => prevChats.map(chat => 
                 chat._id === chatId 
                 ? { 
@@ -298,7 +206,6 @@ const Chat = () => {
                 : chat
             ));
 
-            // Play response audio using standard Audio API
             if (response.data.audio) {
                 const audio = new Audio(`data:audio/mp3;base64,${response.data.audio}`);
                 await audio.play();
@@ -316,63 +223,9 @@ const Chat = () => {
         }
     };
 
-    const stopAudio = () => {
-        try {
-            if (audioSourceRef.current) {
-                audioSourceRef.current.stop();
-                audioSourceRef.current = null;
-            }
-            if (audioContextRef.current) {
-                audioContextRef.current.close();
-                audioContextRef.current = null;
-            }
-            setIsPlaying(false);
-        } catch (err) {
-            console.error('Error stopping audio:', err);
-        }
-    };
-
-    const playAudio = async () => {
-        if (!currentAudioBuffer || hasPlayed) return;
-        
-        try {
-            stopAudio();
-
-            const audioContext = new AudioContext();
-            const source = audioContext.createBufferSource();
-            
-            const bufferCopy = currentAudioBuffer.slice(0);
-            const decodedData = await audioContext.decodeAudioData(bufferCopy);
-            
-            source.buffer = decodedData;
-            source.connect(audioContext.destination);
-            
-            audioSourceRef.current = source;
-            audioContextRef.current = audioContext;
-
-            source.onended = () => {
-                setIsPlaying(false);
-                setHasPlayed(true);
-                stopAudio();
-            };
-
-            source.start(0);
-            setIsPlaying(true);
-        } catch (err) {
-            console.error('Error playing audio:', err);
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Failed to play audio response"
-            });
-            setHasPlayed(true);
-        }
-    };
-
     const selectChat = (chat) => {
         setCurrentChatId(chat._id);
         setChatId(chat._id);
-        setMessageCount(chat.messages.length / 2);
     };
 
     const deleteChat = async (chatId, e) => {
@@ -388,11 +241,9 @@ const Chat = () => {
                 if (remainingChats.length > 0) {
                     setCurrentChatId(remainingChats[0]._id);
                     setChatId(remainingChats[0]._id);
-                    setMessageCount(remainingChats[0].messages.length / 2);
                 } else {
                     setCurrentChatId(null);
                     setChatId(null);
-                    setMessageCount(0);
                 }
             }
 
