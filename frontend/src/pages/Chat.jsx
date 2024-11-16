@@ -10,6 +10,31 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
 import Recorder from 'recorder-js';
 
+const getMimeType = () => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    // Test different MIME types in order of preference
+    const mimeTypes = [
+        'audio/mp4',
+        'audio/m4a',
+        'audio/aac',
+        'audio/wav',
+        'audio/webm',
+        'audio/ogg'
+    ];
+
+    for (const type of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+            console.log(`Using MIME type: ${type}`);
+            return type;
+        }
+    }
+
+    // If no supported type is found, return null and let the browser choose
+    console.log('No supported MIME type found, using browser default');
+    return null;
+};
+
 const Chat = () => {
     const navigate = useNavigate();
     const { isAuthenticated, loading } = useAuth();
@@ -23,6 +48,13 @@ const Chat = () => {
 
     const recorderRef = useRef(null);
     const streamRef = useRef(null);
+
+    const [recordingState, setRecordingState] = useState({
+        isActive: false,
+        isPaused: false,
+        error: null,
+        duration: 0
+    });
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -91,10 +123,17 @@ const Chat = () => {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             console.log('Device is iOS:', isIOS);
 
+            setRecordingState({
+                isActive: true,
+                isPaused: false,
+                error: null,
+                duration: 0
+            });
+
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    sampleRate: 44100,
-                    channelCount: 1,
+                    sampleRate: isIOS ? 44100 : undefined,
+                    channelCount: isIOS ? 1 : undefined,
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
@@ -103,9 +142,18 @@ const Chat = () => {
 
             streamRef.current = stream;
 
-            const audioContext = new AudioContext();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: isIOS ? 44100 : undefined,
+            });
+
             recorderRef.current = new Recorder(audioContext, {
-                onAnalysed: data => console.log('Recording data:', data)
+                onAnalysed: data => {
+                    setRecordingState(prev => ({
+                        ...prev,
+                        duration: data.duration || prev.duration
+                    }));
+                    console.log('Recording data:', data);
+                }
             });
 
             await recorderRef.current.init(stream);
@@ -115,10 +163,19 @@ const Chat = () => {
 
         } catch (err) {
             console.error('Recording setup failed:', err);
+            
+            setRecordingState(prev => ({
+                ...prev,
+                isActive: false,
+                error: err.message
+            }));
+
             toast({
                 variant: "destructive",
                 title: "Recording Error",
-                description: "Please ensure microphone access is granted and try again"
+                description: err.name === 'NotAllowedError' 
+                    ? "Please grant microphone access to record audio."
+                    : "Failed to start recording. Please try again."
             });
 
             if (streamRef.current) {
@@ -133,8 +190,19 @@ const Chat = () => {
         try {
             if (recorderRef.current) {
                 setIsProcessing(true);
+                setRecordingState(prev => ({
+                    ...prev,
+                    isActive: false,
+                    isPaused: false
+                }));
+
                 const { blob } = await recorderRef.current.stop();
-                await sendAudioToServer(blob);
+                
+                const mimeType = getMimeType() || 'audio/wav';
+                
+                const audioBlob = new Blob([blob], { type: mimeType });
+                
+                await sendAudioToServer(audioBlob);
 
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach(track => track.stop());
@@ -143,6 +211,10 @@ const Chat = () => {
             }
         } catch (err) {
             console.error('Error stopping recording:', err);
+            setRecordingState(prev => ({
+                ...prev,
+                error: err.message
+            }));
             toast({
                 variant: "destructive",
                 title: "Error",
@@ -169,16 +241,19 @@ const Chat = () => {
             const formData = new FormData();
             
             const timestamp = Date.now();
-            const fileName = `audio_${timestamp}.wav`;
+            const mimeType = audioBlob.type;
+            const extension = mimeType.includes('mp4') ? '.m4a' : 
+                             mimeType.includes('webm') ? '.webm' : '.wav';
+            const fileName = `audio_${timestamp}${extension}`;
             
             const audioFile = new File([audioBlob], fileName, {
-                type: 'audio/wav',
+                type: mimeType,
                 lastModified: timestamp
             });
             
             console.log('Sending file:', {
                 name: fileName,
-                type: 'audio/wav',
+                type: mimeType,
                 size: audioFile.size
             });
             
