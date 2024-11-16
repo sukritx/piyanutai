@@ -14,6 +14,12 @@ const Chat = () => {
     const { isAuthenticated, loading } = useAuth();
     const { toast } = useToast();
 
+    const [isRecording, setIsRecording] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [chats, setChats] = useState([]);
+    const [currentChatId, setCurrentChatId] = useState(null);
+    const [chatId, setChatId] = useState(null);
+
     const [isPlaying, setIsPlaying] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [response, setResponse] = useState('');
