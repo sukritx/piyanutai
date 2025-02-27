@@ -15,6 +15,7 @@ const logger = require('./utils/logger');
 const NodeCache = require("node-cache");
 const chatRouter = require('./routes/chatRouter');
 const finetuneRouter = require('./routes/finetuneRouter');
+const dashboardRouter = require('./routes/dashboardRouter');
 
 dotenv.config();
 
@@ -116,6 +117,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/user', userRouter);
 app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/finetune', finetuneRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
 
 // CSRF error handler
 app.use((err, req, res, next) => {

@@ -23,7 +23,6 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth-callback" element={<AuthCallback />} />
             <Route path="/chat" element={<Chat />} />
-            <Route path="/finetune" element={<Finetune />} />
           </Routes>
         </div>
         <Toaster />
