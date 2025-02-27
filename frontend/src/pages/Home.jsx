@@ -15,11 +15,14 @@ const Home = () => {
         <div className="text-purple-600 font-medium mb-4">
           🎉 Celebrating the 60th Anniversary of CMU 🎉
         </div>
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-2">
           AI platform for nursing
-          <br />
-          by Piyanut Xuto
         </h1>
+        <div className="text-xl md:text-2xl text-muted-foreground mb-6">
+          Associate Professor Dr Piyanut Xuto
+          <br />
+          <span className="text-lg md:text-xl">Faculty of Nursing, Chiang Mai University</span>
+        </div>
         <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto">
           AIPiyanut brings you cutting-edge AI for education and research for nursing.
         </p>
