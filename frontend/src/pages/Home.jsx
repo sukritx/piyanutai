@@ -5,6 +5,13 @@ const Home = () => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground px-4 md:px-6">
       <div className="max-w-4xl mx-auto text-center">
+        <div className="mb-6">
+          <img 
+            src="/piyanut.jpg" 
+            alt="Piyanut" 
+            className="w-80 h-80 object-cover rounded-2xl mx-auto shadow-lg"
+          />
+        </div>
         <div className="text-purple-600 font-medium mb-4">
           🎉 Celebrating the 60th Anniversary of CMU 🎉
         </div>
