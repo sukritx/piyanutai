@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 
 const signinSchema = z.object({
@@ -53,37 +53,60 @@ const Signin = () => {
   };
 
   return (
-    <Card className="w-[350px] mx-auto">
-      <CardHeader>
-        <CardTitle>Sign In</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {alertError && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{alertError}</AlertDescription>
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input 
-            type="email" 
-            name="email" 
-            placeholder="Email" 
-            value={formData.email} 
-            onChange={handleChange} 
-          />
-          {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
-          <Input 
-            type="password" 
-            name="password" 
-            placeholder="Password" 
-            value={formData.password} 
-            onChange={handleChange} 
-          />
-          {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-          <Button type="submit" className="w-full">Sign In</Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-primary mb-2">Welcome Back</h1>
+        <p className="text-muted-foreground">Sign in to continue to AIPiyanut</p>
+      </div>
+
+      <Card className="w-full max-w-[400px] shadow-lg">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl text-center">Sign In</CardTitle>
+          <CardDescription className="text-center">
+            Enter your email and password to sign in
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {alertError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{alertError}</AlertDescription>
+            </Alert>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Input 
+                type="email" 
+                name="email" 
+                placeholder="Email" 
+                value={formData.email} 
+                onChange={handleChange}
+                className="h-11"
+              />
+              {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
+            </div>
+            <div className="space-y-2">
+              <Input 
+                type="password" 
+                name="password" 
+                placeholder="Password" 
+                value={formData.password} 
+                onChange={handleChange}
+                className="h-11"
+              />
+              {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
+            </div>
+            <Button type="submit" className="w-full h-11">Sign In</Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-muted-foreground">Don't have an account? </span>
+            <Link to="/signup" className="text-primary hover:underline font-medium">
+              Sign up
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

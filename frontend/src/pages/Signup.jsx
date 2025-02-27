@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Link, useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import api from '../utils/api';
 
@@ -55,23 +56,71 @@ const Signup = () => {
   };
 
   return (
-    <Card className="w-[350px] mx-auto">
-      <CardHeader>
-        <CardTitle>Sign Up</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {errors.general && <p className="text-red-500 text-sm mb-4">{errors.general}</p>}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input type="text" name="name" placeholder="Name" value={formData.name} onChange={handleChange} />
-          {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
-          <Input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} />
-          {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
-          <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} />
-          {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-          <Button type="submit" className="w-full">Sign Up</Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-primary mb-2">Create Account</h1>
+        <p className="text-muted-foreground">Join AIPiyanut to start your journey</p>
+      </div>
+
+      <Card className="w-full max-w-[400px] shadow-lg">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl text-center">Sign Up</CardTitle>
+          <CardDescription className="text-center">
+            Enter your details to create your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {errors.general && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{errors.general}</AlertDescription>
+            </Alert>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Input 
+                type="text" 
+                name="name" 
+                placeholder="Full Name" 
+                value={formData.name} 
+                onChange={handleChange}
+                className="h-11"
+              />
+              {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
+            </div>
+            <div className="space-y-2">
+              <Input 
+                type="email" 
+                name="email" 
+                placeholder="Email" 
+                value={formData.email} 
+                onChange={handleChange}
+                className="h-11"
+              />
+              {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
+            </div>
+            <div className="space-y-2">
+              <Input 
+                type="password" 
+                name="password" 
+                placeholder="Password" 
+                value={formData.password} 
+                onChange={handleChange}
+                className="h-11"
+              />
+              {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
+            </div>
+            <Button type="submit" className="w-full h-11">Create Account</Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-muted-foreground">Already have an account? </span>
+            <Link to="/signin" className="text-primary hover:underline font-medium">
+              Sign in
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
