@@ -19,7 +19,7 @@ const Navbar = () => {
   return (
     <nav className="bg-background border-b">
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-        <Link to="/" className="text-xl font-bold">AIPiyanut</Link>
+        <Link to="/" className="text-xl font-medium">AIPiyanut</Link>
         <div>
           {isAuthenticated ? (
             <>
