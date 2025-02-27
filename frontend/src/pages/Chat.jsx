@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from 'date-fns';
 import { Textarea } from "@/components/ui/textarea";
+import ReactMarkdown from 'react-markdown';
 
 const Chat = () => {
     const navigate = useNavigate();
@@ -115,10 +116,8 @@ const Chat = () => {
 
     const deleteChat = async (chatIdToDelete, e) => {
         e.stopPropagation();
-
         try {
             await api.delete(`/api/v1/chat/${chatIdToDelete}`);
-            
             setChats(prevChats => prevChats.filter(chat => chat._id !== chatIdToDelete));
             
             if (currentChatId === chatIdToDelete) {
@@ -144,6 +143,15 @@ const Chat = () => {
             });
         }
     };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    };
+
+    const currentChat = chats.find(chat => chat._id === currentChatId);
 
     return (
         <div className="min-h-[80vh] flex flex-col lg:flex-row items-stretch w-full max-w-6xl mx-auto">
@@ -211,58 +219,55 @@ const Chat = () => {
                 </ScrollArea>
             </div>
 
-            {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col bg-white min-h-[50vh] lg:min-h-0">
-                {/* Chat Header */}
-                <div className="p-4 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold text-gray-700 text-center lg:text-left">
-                        Chat with PiyanutAI
-                    </h2>
-                </div>
-
-                {/* Messages Area */}
-                <ScrollArea className="flex-1 p-4 lg:p-6 bg-gray-50">
-                    {currentChatId && chats.find(chat => chat._id === currentChatId)?.messages.map((message, index) => (
-                        <div 
-                            key={index} 
-                            className={cn(
-                                "flex flex-col gap-2 mb-4",
-                                message.role === 'assistant' ? "items-start" : "items-end"
-                            )}
-                        >
-                            <div className={cn(
-                                "max-w-[90%] sm:max-w-[80%] p-3 lg:p-4 rounded-lg",
-                                message.role === 'assistant' 
-                                    ? "bg-blue-50 border border-blue-100" 
-                                    : "bg-white border border-gray-200"
-                            )}>
-                                <p className="text-gray-700 text-sm lg:text-base whitespace-pre-wrap">
-                                    {message.content}
-                                </p>
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col bg-gray-50">
+                <ScrollArea className="flex-1 p-4">
+                    <div className="space-y-4 max-w-3xl mx-auto">
+                        {currentChat?.messages.map((msg, index) => (
+                            <div
+                                key={index}
+                                className={cn(
+                                    "flex",
+                                    msg.role === 'user' ? "justify-end" : "justify-start"
+                                )}
+                            >
+                                <div
+                                    className={cn(
+                                        "max-w-[80%] px-4 py-3 rounded-lg",
+                                        msg.role === 'user' 
+                                            ? "bg-primary text-white" 
+                                            : "bg-white border shadow-sm"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "prose prose-sm max-w-none",
+                                        msg.role === 'user' && "prose-invert"
+                                    )}>
+                                        <ReactMarkdown>
+                                            {msg.content}
+                                        </ReactMarkdown>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </ScrollArea>
 
                 {/* Input Area */}
-                <div className="p-4 border-t border-gray-200">
-                    <div className="flex gap-2">
+                <div className="border-t bg-white p-4">
+                    <div className="max-w-3xl mx-auto flex gap-4">
                         <Textarea
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
+                            onKeyPress={handleKeyPress}
                             placeholder="Type your message..."
-                            className="flex-1"
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    sendMessage();
-                                }
-                            }}
+                            className="min-h-[60px] resize-none"
+                            disabled={isProcessing}
                         />
-                        <Button
+                        <Button 
                             onClick={sendMessage}
                             disabled={isProcessing || !message.trim()}
-                            className="bg-[#171717] hover:bg-[#2d2d2d]"
+                            className="self-end"
                         >
                             {isProcessing ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
